@@ -1,4 +1,3 @@
-# Welcome project for newcomers!
 
 # Introduction
 In this project you have to implement a message broker, based on `broker.Broker`
