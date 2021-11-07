@@ -7,6 +7,9 @@ import (
 	"time"
 )
 
+//TODO CONSISTANT HASING
+//TODO REDIS ALGORITHM
+
 type Module struct {
 	chat       map[string][]broker.Message
 	clients    map[string][]*chan broker.Message
