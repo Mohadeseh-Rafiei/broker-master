@@ -4,7 +4,7 @@ In this project you have to implement a message broker, based on `broker.Broker`
 interface. There are unit tests to specify requirements and also validate your implementation.
 
 # Roadmap
-- [ ] Implement `broker.Broker` interface and pass all tests
+- [ ] Implement `broker.Broker` interface by tests
 - [ ] Add basic logs and prometheus metrics
   - Metrics for each RPCs:
     - `method_count` to show count of failed/successful RPC calls
