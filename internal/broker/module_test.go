@@ -90,7 +90,7 @@ func TestPublishShouldSendMessageToSubscribedChans(t *testing.T) {
 }
 
 func TestPublishShouldPreserveOrder(t *testing.T) {
-	n := 2
+	n := 50
 	messages := make([]broker.Message, n)
 	sub, _ := service.Subscribe(mainCtx, "ali")
 	for i := 0; i < n; i++ {
