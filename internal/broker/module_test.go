@@ -2,6 +2,7 @@ package broker
 
 import (
 	"context"
+	"fmt"
 	"github.com/stretchr/testify/assert"
 	"main/pkg/broker"
 	"math/rand"
@@ -297,7 +298,8 @@ func TestDataRace(t *testing.T) {
 				return
 
 			case id := <-ids:
-				_, err := service.Fetch(mainCtx, "ali", id)
+				zir, err := service.Fetch(mainCtx, "ali", id)
+				fmt.Println(zir)
 				assert.Nil(t, err)
 			}
 		}

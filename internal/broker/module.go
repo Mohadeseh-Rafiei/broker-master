@@ -5,84 +5,82 @@ import (
 	"fmt"
 	"github.com/go-redis/redis"
 	_ "github.com/go-redis/redis"
+	"log"
 	"main/pkg/broker"
 	"strconv"
 	"sync"
 	"time"
 )
 
-// salam ziba
+type SubjectInfo struct {
+	chats           []broker.Message
+	expirations     []bool
+	mx              *sync.Mutex
+	numberOfClients int
+}
+
 type Module struct {
-	chat       map[string][]broker.Message
-	clients    map[string][]*chan broker.Message
-	expiration map[string][]bool
-	*redis.Client
-	close          bool
-	mx             sync.Mutex
-	mx_for_subject map[string]*sync.Mutex
+	redisClient *redis.Client
+	close       bool
+	quit        chan struct{}
+	mx          sync.Mutex
+	subjectInfo sync.Map
 }
 
 func NewModule() broker.Broker {
 	client := redis.NewClient(&redis.Options{Addr: ":6379"})
 	return &Module{
-		chat:           map[string][]broker.Message{},
-		clients:        map[string][]*chan broker.Message{},
-		expiration:     map[string][]bool{},
-		mx_for_subject: map[string]*sync.Mutex{},
-		Client:         client,
-		close:          false,
+		redisClient: client,
+		close:       false,
+		quit:        make(chan struct{}),
 	}
 }
 
-func (m *Module) createSubjectMutexIfNotExists(subject string) {
-	m.mx.Lock()
-	if _, ok := m.mx_for_subject[subject]; !ok {
-		m.mx_for_subject[subject] = &sync.Mutex{}
-	}
-	m.mx.Unlock()
+func (m *Module) createSubjectInfoIfNotExistsAndLock(subject string) *SubjectInfo {
+	value, _ := m.subjectInfo.LoadOrStore(subject, &SubjectInfo{mx: &sync.Mutex{}, numberOfClients: 0})
+	mtx := value.(*SubjectInfo)
+	mtx.mx.Lock()
+	return mtx
 }
 
 func (m *Module) Close() error {
-	m.mx.Lock()
 	m.close = true
-	defer m.mx.Unlock()
-	for _, elements := range m.clients {
-		for _, element := range elements {
-			close(*element)
-		}
-	}
+	close(m.quit)
 	return nil
 }
 
 func (m *Module) Publish(ctx context.Context, subject string, msg broker.Message) (int, error) {
+
+	log.Printf("Subject and msg: %v %v", subject, msg)
+
 	if m.close {
 		return 0, broker.ErrUnavailable
 	}
-	m.createSubjectMutexIfNotExists(subject)
-	m.mx_for_subject[subject].Lock()
-	m.chat[subject] = append(m.chat[subject], msg)
+	subjectInfo := m.createSubjectInfoIfNotExistsAndLock(subject)
+	subjectInfo.chats = append(subjectInfo.chats, msg)
+	subjectInfo.expirations = append(subjectInfo.expirations, false)
+
 	wg := &sync.WaitGroup{}
-	m.expiration[subject] = append(m.expiration[subject], false)
-	index := len(m.chat[subject]) - 1
-	for i, _ := range m.clients[subject] {
+	chatId := len(subjectInfo.chats) - 1
+	for i := 0; i < subjectInfo.numberOfClients; i++ {
 		wg.Add(1)
 		go func(i int, wg *sync.WaitGroup) {
 			defer wg.Done()
-			hi, err := m.Client.LPush(subject+":"+strconv.Itoa(i), index).Result()
+			hi, err := m.redisClient.LPush("musub:"+subject+":"+strconv.Itoa(i), chatId).Result()
 			fmt.Println("Lpush res: ", hi, err)
 		}(i, wg)
 	}
 	wg.Wait()
-	m.mx_for_subject[subject].Unlock()
+	subjectInfo.mx.Unlock()
 	go func() {
 		if msg.Expiration == 0 {
 			return
 		}
 		ticker := time.NewTicker(msg.Expiration)
 		<-ticker.C
-		m.expiration[subject][index] = true
+		subjectInfo.expirations[chatId] = true
 	}()
-	return index, nil
+	return chatId, nil
 }
 
 func (m *Module) Subscribe(ctx context.Context, subject string) (<-chan broker.Message, error) {
@@ -90,52 +88,45 @@ func (m *Module) Subscribe(ctx context.Context, subject string) (<-chan broker.M
 	if m.close {
 		return empty_chan, broker.ErrUnavailable
 	}
-	m.createSubjectMutexIfNotExists(subject)
-	out_chan := make(chan broker.Message, 1000000)
-	m.mx_for_subject[subject].Lock()
-	//wg := &sync.WaitGroup{}
-	//
-	//for _, n := range m.chat[subject]{
-	//	wg.Add(1)
-	//	go func(wg *sync.WaitGroup) {
-	//		out_chan <- n
-	//		wg.Done()
-	//	}(wg)
-	//}
-	//wg.Wait()
+	out_chan := make(chan broker.Message)
+	subjectInfo := m.createSubjectInfoIfNotExistsAndLock(subject)
+	defer subjectInfo.mx.Unlock()
+	queueId := subjectInfo.numberOfClients
+	subjectInfo.numberOfClients++
 
-	m.clients[subject] = append(m.clients[subject], &out_chan)
-	index := len(m.clients[subject]) - 1
-	go func() {
+	go func(subjectInfo *SubjectInfo, CLOSE chan struct{}) {
 		for {
-			str, _ := m.Client.BRPop(1000000000, subject+":"+strconv.Itoa(index)).Result()
-			fmt.Println("str: ", str)
-			if len(str) == 0 {
-				break
+			select {
+			case <-CLOSE:
+				close(out_chan)
+				fmt.Println("closed chan")
+				return
+			default:
+				str, _ := m.redisClient.BRPop(1*time.Second, "musub:"+subject+":"+strconv.Itoa(queueId)).Result()
+				fmt.Println("Rpop result: ", str)
+				if len(str) == 0 {
+					break
+				}
+				id, _ := strconv.Atoi(str[1])
+				fmt.Println("id: ", id)
+				msg := subjectInfo.chats[id]
+				out_chan <- msg
 			}
-			id, _ := strconv.Atoi(str[1])
-			fmt.Println("id: ", id)
-			msg := m.chat[subject][id]
-			out_chan <- msg
 		}
 
-	}()
-	m.mx_for_subject[subject].Unlock()
+	}(subjectInfo, m.quit)
 	return out_chan, nil
 }
 
 func (m *Module) Fetch(ctx context.Context, subject string, id int) (broker.Message, error) {
 	msg := broker.Message{}
-	if _, ok := m.chat[subject]; !ok {
-		return msg, broker.ErrUnavailable
-	}
-	m.mx_for_subject[subject].Lock()
-	defer m.mx_for_subject[subject].Unlock()
+	subjectInfo := m.createSubjectInfoIfNotExistsAndLock(subject)
+	defer subjectInfo.mx.Unlock()
 	if m.close {
 		return msg, broker.ErrUnavailable
 	}
-	if m.expiration[subject][id] {
+	if subjectInfo.expirations[id] {
 		return msg, broker.ErrExpiredID
 	}
-	return m.chat[subject][id], nil
+	return subjectInfo.chats[id], nil
 }
