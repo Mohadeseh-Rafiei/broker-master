@@ -70,6 +70,7 @@ func TestPublishShouldSendMessageToSubscribedChan(t *testing.T) {
 	sub, _ := service.Subscribe(mainCtx, "ali")
 	_, _ = service.Publish(mainCtx, "ali", msg)
 	in := <-sub
+	fmt.Println("hi", in)
 
 	assert.Equal(t, msg, in)
 }
@@ -84,6 +85,9 @@ func TestPublishShouldSendMessageToSubscribedChans(t *testing.T) {
 	in1 := <-sub1
 	in2 := <-sub2
 	in3 := <-sub3
+	fmt.Println("hi", in1)
+	fmt.Println("hi", in2)
+	fmt.Println("hi", in3)
 
 	assert.Equal(t, msg, in1)
 	assert.Equal(t, msg, in2)
@@ -141,8 +145,8 @@ func TestExpiredMessageShouldNotBeFetchable(t *testing.T) {
 
 func TestNewSubscriptionShouldNotGetPreviousMessages(t *testing.T) {
 	msg := createMessage()
-	_, _ = service.Publish(mainCtx, "ali", msg)
-	sub, _ := service.Subscribe(mainCtx, "ali")
+	_, _ = service.Publish(mainCtx, "mohadese", msg)
+	sub, _ := service.Subscribe(mainCtx, "mohadese")
 
 	select {
 	case <-sub:

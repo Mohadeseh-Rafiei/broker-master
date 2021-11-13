@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"github.com/go-redis/redis"
 	_ "github.com/go-redis/redis"
-	"log"
+	log "github.com/sirupsen/logrus"
 	"main/pkg/broker"
 	"strconv"
 	"sync"
@@ -51,9 +51,13 @@ func (m *Module) Close() error {
 
 func (m *Module) Publish(ctx context.Context, subject string, msg broker.Message) (int, error) {
 
-	log.Printf("Subject and msg: %v %v", subject, msg)
+	log.Infof("Subject and msg: %v %v", subject, msg)
 
 	if m.close {
+		log.WithFields(log.Fields{
+			"request": subject,
+			"error":   broker.ErrUnavailable,
+		}).Error("can't Publish from  topic: ", subject)
 		return 0, broker.ErrUnavailable
 	}
 	subjectInfo := m.createSubjectInfoIfNotExistsAndLock(subject)
@@ -66,8 +70,15 @@ func (m *Module) Publish(ctx context.Context, subject string, msg broker.Message
 		wg.Add(1)
 		go func(i int, wg *sync.WaitGroup) {
 			defer wg.Done()
-			hi, err := m.redisClient.LPush("musub:"+subject+":"+strconv.Itoa(i), chatId).Result()
-			fmt.Println("Lpush res: ", hi, err)
+			data, err := m.redisClient.LPush("musub:"+subject+":"+strconv.Itoa(i), chatId).Result()
+			if err != nil {
+				log.WithFields(log.Fields{
+					"request": subject,
+					"error":   err.Error(),
+				}).Error("can't publish on topic: ", subject)
+				return
+			}
+			log.Info("published: ", data)
 		}(i, wg)
 	}
 	wg.Wait()
@@ -86,6 +97,10 @@ func (m *Module) Publish(ctx context.Context, subject string, msg broker.Message
 func (m *Module) Subscribe(ctx context.Context, subject string) (<-chan broker.Message, error) {
 	empty_chan := make(chan broker.Message)
 	if m.close {
+		log.WithFields(log.Fields{
+			"request": subject,
+			"error":   broker.ErrUnavailable,
+		}).Error("can't Subscribe on topic: ", subject)
 		return empty_chan, broker.ErrUnavailable
 	}
 	out_chan := make(chan broker.Message)
@@ -115,6 +130,7 @@ func (m *Module) Subscribe(ctx context.Context, subject string) (<-chan broker.M
 		}
 
 	}(subjectInfo, m.quit)
+	log.Info("Subscribed...")
 	return out_chan, nil
 }
 
@@ -123,9 +139,17 @@ func (m *Module) Fetch(ctx context.Context, subject string, id int) (broker.Mess
 	subjectInfo := m.createSubjectInfoIfNotExistsAndLock(subject)
 	defer subjectInfo.mx.Unlock()
 	if m.close {
+		log.WithFields(log.Fields{
+			"request": subject,
+			"error":   broker.ErrUnavailable,
+		}).Error("can't fetch from  topic: ", subject)
 		return msg, broker.ErrUnavailable
 	}
 	if subjectInfo.expirations[id] {
+		log.WithFields(log.Fields{
+			"request": subject,
+			"error":   broker.ErrExpiredID,
+		}).Error("can't fetch from  topic: ", subject)
 		return msg, broker.ErrExpiredID
 	}
 	return subjectInfo.chats[id], nil
