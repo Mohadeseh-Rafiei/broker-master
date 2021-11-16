@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	_ "flag"
+	"github.com/prometheus/client_golang/prometheus"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	_ "google.golang.org/protobuf/proto"
@@ -10,6 +11,7 @@ import (
 	"io"
 	pb "main/api/proto"
 	internal "main/internal/broker"
+	pkg2 "main/pkg"
 	pkg "main/pkg/broker"
 	"net"
 	_ "net"
@@ -35,6 +37,8 @@ func GetBroker() pkg.Broker {
 
 func (s *Server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.PublishResponse, error) {
 	log.WithField("Received:", in.String())
+	pkg2.GetMethodCountMetric().With(prometheus.Labels{"method_name": "publish", "subject": in.Subject}).Inc()
+	start := time.Now()
 	brk := GetBroker()
 	msgId, err := brk.Publish(ctx, in.Subject, pkg.Message{
 		Body:       string(in.Body),
@@ -45,13 +49,23 @@ func (s *Server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 			"request": in,
 			"error":   err.Error(),
 		}).Error("can't publish on topc: ", in.Subject)
+		pkg2.GetErrorRateMetric().With(prometheus.Labels{"method_name": "publish", "subject": in.Subject, "error": err.Error()}).Observe(1)
+		defer pkg2.GetMethodDurationMetric().With(
+			prometheus.Labels{"method_name": "publish", "subject": in.Subject, "successful": "false"},
+		).Observe(float64(time.Until(start).Milliseconds()))
 		return &pb.PublishResponse{}, err
 	}
 	log.Info("Publish was successfully!")
+	defer pkg2.GetMethodDurationMetric().With(
+		prometheus.Labels{"method_name": "publish", "subject": in.Subject, "successful": "true"},
+	).Observe(float64(time.Until(start).Milliseconds()))
 	return &pb.PublishResponse{Id: int32(msgId)}, err
 }
 func (s *Server) Subscribe(in *pb.SubscribeRequest, stream pb.Broker_SubscribeServer) error {
 	log.WithField("Received: ", in.String())
+	pkg2.GetMethodCountMetric().With(prometheus.Labels{"method_name": "subscribe", "subject": in.Subject}).Inc()
+	pkg2.GetActiveSubscribesMetric().With(prometheus.Labels{"subject": in.Subject}).Inc()
+	start := time.Now()
 	brk := GetBroker()
 	chans, err := brk.Subscribe(s.ctx, in.Subject)
 
@@ -60,6 +74,11 @@ func (s *Server) Subscribe(in *pb.SubscribeRequest, stream pb.Broker_SubscribeSe
 			"request": in,
 			"error":   err.Error(),
 		}).Error("client can't Subscribe on Subject: ", in.Subject)
+		pkg2.GetErrorRateMetric().With(prometheus.Labels{"method_name": "subscribe", "subject": in.Subject, "error": err.Error()}).Observe(1)
+		defer pkg2.GetMethodDurationMetric().With(
+			prometheus.Labels{"method_name": "subscribe", "subject": in.Subject, "successful": "false"},
+		).Observe(float64(time.Until(start).Milliseconds()))
+
 		return err
 	}
 	for {
@@ -75,8 +94,16 @@ func (s *Server) Subscribe(in *pb.SubscribeRequest, stream pb.Broker_SubscribeSe
 						"request": in,
 						"error":   err.Error(),
 					}).Error("client can't Subscribe on Subject: ", in.Subject)
+					pkg2.GetErrorRateMetric().With(prometheus.Labels{"method_name": "subscribe", "subject": in.Subject, "error": err.Error()}).Observe(1)
+					defer pkg2.GetMethodDurationMetric().With(
+						prometheus.Labels{"method_name": "subscribe", "subject": in.Subject, "successful": "false"},
+					).Observe(float64(time.Until(start).Milliseconds()))
+
 					return err
 				}
+				defer pkg2.GetMethodDurationMetric().With(
+					prometheus.Labels{"method_name": "subscribe", "subject": in.Subject, "successful": "true"},
+				).Observe(float64(time.Until(start).Milliseconds()))
 				log.Infof("Received Message: %v from Server was Successfuly!", response.Body)
 			}
 		}
@@ -84,17 +111,29 @@ func (s *Server) Subscribe(in *pb.SubscribeRequest, stream pb.Broker_SubscribeSe
 }
 func (s *Server) Fetch(ctx context.Context, fch *pb.FetchRequest) (*pb.MessageResponse, error) {
 	log.Info("Received: ", fch.String())
+	pkg2.GetMethodCountMetric().With(prometheus.Labels{"method_name": "fetch", "subject": fch.Subject}).Inc()
 	brk := GetBroker()
+	start := time.Now()
 	msg, err := brk.Fetch(ctx, fch.Subject, int(fch.Id))
 	if err != nil {
 		log.WithFields(log.Fields{
 			"request": fch,
 			"error":   err.Error(),
 		}).Error("client can't Fetch Message on Subject: ", fch.Subject)
+		pkg2.GetErrorRateMetric().With(prometheus.Labels{"method_name": "fetch", "subject": fch.Subject, "error": err.Error()}).Observe(1)
+		defer pkg2.GetMethodDurationMetric().With(
+			prometheus.Labels{"method_name": "subscribe", "fetch": fch.Subject, "successful": "false"},
+		).Observe(float64(time.Until(start).Milliseconds()))
+
 		return &pb.MessageResponse{}, err
 	}
 	data := []byte(msg.Body)
 	log.Infof("Fetch %v From server was successfuly!", msg.Body)
+
+	defer pkg2.GetMethodDurationMetric().With(
+		prometheus.Labels{"method_name": "publish", "fetch": fch.Subject, "successful": "true"},
+	).Observe(float64(time.Until(start).Milliseconds()))
+
 	return &pb.MessageResponse{Body: data}, err
 }
 
@@ -127,6 +166,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
+	pkg2.StartPrometheusServer()
 	s := grpc.NewServer()
 	pb.RegisterBrokerServer(s, &Server{})
 	log.Printf("server listening at %v", lis.Addr())
