@@ -1,6 +1,10 @@
 package main
 
 import (
+	pb "broker-massage/broker-master/api/proto"
+	internal "broker-massage/broker-master/internal/broker"
+	pkg2 "broker-massage/broker-master/pkg"
+	pkg "broker-massage/broker-master/pkg/broker"
 	"context"
 	_ "flag"
 	"github.com/prometheus/client_golang/prometheus"
@@ -9,10 +13,6 @@ import (
 	_ "google.golang.org/protobuf/proto"
 	"gopkg.in/Graylog2/go-gelf.v1/gelf"
 	"io"
-	pb "main/api/proto"
-	internal "main/internal/broker"
-	pkg2 "main/pkg"
-	pkg "main/pkg/broker"
 	"net"
 	_ "net"
 	"os"

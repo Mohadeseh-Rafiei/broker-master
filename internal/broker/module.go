@@ -1,12 +1,12 @@
 package broker
 
 import (
+	"broker-massage/broker-master/pkg/broker"
 	"context"
 	"fmt"
 	"github.com/go-redis/redis"
 	_ "github.com/go-redis/redis"
 	log "github.com/sirupsen/logrus"
-	"main/pkg/broker"
 	"strconv"
 	"sync"
 	"time"
