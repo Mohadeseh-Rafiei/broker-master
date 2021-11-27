@@ -83,14 +83,14 @@ func (m *Module) Publish(ctx context.Context, subject string, msg broker.Message
 	}
 	wg.Wait()
 	subjectInfo.mx.Unlock()
-	go func() {
+	go func(chatId int) {
 		if msg.Expiration == 0 {
 			return
 		}
-		ticker := time.NewTicker(msg.Expiration)
+		ticker := time.NewTicker(msg.Expiration * time.Second)
 		<-ticker.C
 		subjectInfo.expirations[chatId] = true
-	}()
+	}(chatId)
 	return chatId, nil
 }
 

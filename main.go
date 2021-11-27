@@ -119,7 +119,7 @@ func (s *Server) Fetch(ctx context.Context, fch *pb.FetchRequest) (*pb.MessageRe
 		}).Error("client can't Fetch Message on Subject: ", fch.Subject)
 		pkg2.GetErrorRateMetric().With(prometheus.Labels{"method_name": "fetch", "subject": fch.Subject, "error": err.Error()}).Observe(1)
 		defer pkg2.GetMethodDurationMetric().With(
-			prometheus.Labels{"method_name": "subscribe", "fetch": fch.Subject, "successful": "false"},
+			prometheus.Labels{"method_name": "fetch", "subject": fch.Subject, "successful": "false"},
 		).Observe(float64(time.Until(start).Milliseconds()))
 
 		return &pb.MessageResponse{}, err
@@ -128,7 +128,7 @@ func (s *Server) Fetch(ctx context.Context, fch *pb.FetchRequest) (*pb.MessageRe
 	log.Infof("Fetch %v From server was successfuly!", msg.Body)
 
 	defer pkg2.GetMethodDurationMetric().With(
-		prometheus.Labels{"method_name": "publish", "fetch": fch.Subject, "successful": "true"},
+		prometheus.Labels{"method_name": "fetch", "subject": fch.Subject, "successful": "true"},
 	).Observe(float64(time.Until(start).Milliseconds()))
 
 	return &pb.MessageResponse{Body: data}, err
