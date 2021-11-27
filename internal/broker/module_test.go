@@ -1,10 +1,10 @@
 package broker
 
 import (
+	"broker-massage/pkg/broker"
 	"context"
 	"fmt"
 	"github.com/stretchr/testify/assert"
-	"main/pkg/broker"
 	"math/rand"
 	"sync"
 	"testing"

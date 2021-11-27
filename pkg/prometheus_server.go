@@ -12,35 +12,27 @@ import (
 var (
 	activeSubscribes = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Namespace: "Broker",
-			Subsystem: "broker-master",
-			Name:      "active_subscribes",
-			Help:      "active subscribes on master broker",
+			Name: "active_subscribes",
+			Help: "active subscribes on master broker",
 		}, []string{"subject"})
 
 	requestDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Namespace: "Broker",
-			Subsystem: "broker-master",
-			Name:      "requests_duration",
-			Help:      "requestsDuration of master broker",
-			Buckets:   []float64{25, 50, 95, 99},
+			Name:    "requests_duration",
+			Help:    "requestsDuration of master broker",
+			Buckets: []float64{25, 50, 95, 99},
 		}, []string{"method_name", "subject", "successful"})
 
 	methodCount = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Namespace: "Broker",
-			Subsystem: "master-broker",
-			Name:      "grpc_method_count",
-			Help:      "grpc method count",
+			Name: "grpc_method_count",
+			Help: "grpc method count",
 		}, []string{"method_name", "subject"})
 
 	errorRate = prometheus.NewHistogramVec(prometheus.HistogramOpts{
-		Namespace: "Broker",
-		Subsystem: "master-broker",
-		Name:      "error_rate",
-		Help:      "error rate of master broker",
-		Buckets:   []float64{25, 50, 70, 80, 90, 95, 99},
+		Name:    "error_rate",
+		Help:    "error rate of master broker",
+		Buckets: []float64{25, 50, 70, 80, 90, 95, 99},
 	}, []string{"method_name", "subject", "error"})
 )
 
@@ -57,15 +49,16 @@ func GetActiveSubscribesMetric() *prometheus.GaugeVec {
 	return activeSubscribes
 }
 
-func init() {
+func StartPrometheusServer() {
 	prometheus.MustRegister(methodCount)
 	prometheus.MustRegister(errorRate)
 	prometheus.MustRegister(activeSubscribes)
 	prometheus.MustRegister(requestDuration)
 	log.Info("prometheus registered successfully!")
-}
-
-func StartPrometheusServer() {
+	methodCount.With(prometheus.Labels{
+		"method_name": "alaki",
+		"subject":     "ali",
+	}).Inc()
 	go func() {
 		port := ":5000"
 		http.Handle("/metrics", promhttp.Handler())

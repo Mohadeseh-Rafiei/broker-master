@@ -1,7 +1,7 @@
 package broker
 
 import (
-	"broker-massage/broker-master/pkg/broker"
+	"broker-massage/pkg/broker"
 	"context"
 	"fmt"
 	"github.com/go-redis/redis"

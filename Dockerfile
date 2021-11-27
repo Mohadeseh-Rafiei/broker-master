@@ -2,11 +2,11 @@ FROM golang:1.16.4-alpine as build
 
 WORKDIR /master-broker
 COPY go.mod ./
-COPY go.sum ./
+#COPY go.sum ./
 RUN go mod tidy
 RUN go mod vendor
 COPY ./ ./
-RUN go Build -o ./built/project
+RUN go build -o ./built/project
 
 
 FROM alpine

@@ -1,21 +1,18 @@
 package main
 
 import (
-	pb "broker-massage/broker-master/api/proto"
-	internal "broker-massage/broker-master/internal/broker"
-	pkg2 "broker-massage/broker-master/pkg"
-	pkg "broker-massage/broker-master/pkg/broker"
+	pb "broker-massage/api/proto"
+	internal "broker-massage/internal/broker"
+	pkg2 "broker-massage/pkg"
+	pkg "broker-massage/pkg/broker"
 	"context"
 	_ "flag"
 	"github.com/prometheus/client_golang/prometheus"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	_ "google.golang.org/protobuf/proto"
-	"gopkg.in/Graylog2/go-gelf.v1/gelf"
-	"io"
 	"net"
 	_ "net"
-	"os"
 	"time"
 )
 
@@ -144,20 +141,20 @@ func (s *Server) Fetch(ctx context.Context, fch *pb.FetchRequest) (*pb.MessageRe
 // 	  for every base functionality ( publish, subscribe etc. )
 
 const (
-	port = ":50051"
+	port = ":4000"
 )
 
 func init() {
-	graylogAddr := ":12201"
-	gelfWriter, err := gelf.NewWriter(graylogAddr)
-	if err != nil {
-		log.Fatalf("gelf.NewWriter: %s", err)
-	}
-	// log to both stderr and graylog2
-	log.SetOutput(io.MultiWriter(os.Stderr, gelfWriter))
-	log.Printf("logging to stderr & graylog2@'%s'", graylogAddr)
-
-	log.Printf("Hello gray World")
+	//graylogAddr := ":12201"
+	//gelfWriter, err := gelf.NewWriter(graylogAddr)
+	//if err != nil {
+	//	log.Fatalf("gelf.NewWriter: %s", err)
+	//}
+	//// log to both stderr and graylog2
+	//log.SetOutput(io.MultiWriter(os.Stderr, gelfWriter))
+	//log.Printf("logging to stderr & graylog2@'%s'", graylogAddr)
+	//
+	//log.Printf("Hello gray World")
 
 }
 func main() {
